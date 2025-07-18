@@ -430,7 +430,7 @@ class HypnotixApp {
                         switch (data.type) {
                             case Hls.ErrorTypes.NETWORK_ERROR:
                                 console.log('Network error, trying to recover...');
-                                this.hls.startLoad();
+                                this.fallbackToDirectPlay(channel);
                                 break;
                             case Hls.ErrorTypes.MEDIA_ERROR:
                                 console.log('Media error, trying to recover...');
