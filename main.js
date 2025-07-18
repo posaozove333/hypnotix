@@ -150,8 +150,25 @@ class HypnotixApp {
 
     async loadChannelsFromProvider(provider) {
         if (provider.type === 'local') {
-            // Handle local file (would need file input)
-            throw new Error('Local files not supported in web version');
+            if (!provider.file) {
+                throw new Error('No local file available');
+            }
+            
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const m3uContent = e.target.result;
+                        this.channels = this.parseM3U(m3uContent);
+                        this.filteredChannels = [...this.channels];
+                        resolve();
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                reader.onerror = () => reject(new Error('Failed to read file'));
+                reader.readAsText(provider.file);
+            });
         }
 
         const response = await fetch(provider.url);
@@ -409,7 +426,22 @@ class HypnotixApp {
                 
                 this.hls.on(Hls.Events.ERROR, (event, data) => {
                     console.error('HLS Error:', data);
-                    this.fallbackToDirectPlay(channel);
+                    if (data.fatal) {
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                console.log('Network error, trying to recover...');
+                                this.hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.log('Media error, trying to recover...');
+                                this.hls.recoverMediaError();
+                                break;
+                            default:
+                                console.log('Fatal error, falling back to direct play');
+                                this.fallbackToDirectPlay(channel);
+                                break;
+                        }
+                    }
                 });
                 
             } else if (this.videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
@@ -433,6 +465,7 @@ class HypnotixApp {
     }
 
     fallbackToDirectPlay(channel) {
+        console.log('Attempting direct play for:', channel.url);
         this.videoPlayer.src = channel.url;
         this.videoPlayer.play().then(() => {
             this.currentlyPlaying.textContent = `Playing: ${channel.name}`;
@@ -441,7 +474,7 @@ class HypnotixApp {
             this.stopBtn.disabled = false;
         }).catch(error => {
             console.error('Direct play failed:', error);
-            this.updateStatus(`Cannot play ${channel.name} - format not supported`);
+            this.updateStatus(`Cannot play ${channel.name} - ${error.message || 'format not supported'}`);
             this.currentlyPlaying.textContent = `Error: ${channel.name}`;
             this.videoOverlay.classList.remove('hidden');
         });
@@ -595,7 +628,8 @@ class HypnotixApp {
         const provider = {
             name,
             type,
-            url: type === 'local' ? URL.createObjectURL(this.providerFile.files[0]) : url
+            url: type === 'local' ? null : url,
+            file: type === 'local' ? this.providerFile.files[0] : null
         };
         
         this.providers.push(provider);
