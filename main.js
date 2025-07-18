@@ -429,8 +429,17 @@ class HypnotixApp {
                     if (data.fatal) {
                         switch (data.type) {
                             case Hls.ErrorTypes.NETWORK_ERROR:
-                                console.log('Network error, trying to recover...');
-                                this.fallbackToDirectPlay(channel);
+                                if (data.details === 'manifestLoadError' && data.response && data.response.code === 404) {
+                                    // Stream not found - don't attempt recovery
+                                    this.updateStatus(`Stream not found: ${channel.name}`);
+                                    this.currentlyPlaying.textContent = `Not available: ${channel.name}`;
+                                    this.videoOverlay.classList.remove('hidden');
+                                    this.playBtn.disabled = true;
+                                    this.stopBtn.disabled = true;
+                                } else {
+                                    console.log('Network error, trying to recover...');
+                                    this.fallbackToDirectPlay(channel);
+                                }
                                 break;
                             case Hls.ErrorTypes.MEDIA_ERROR:
                                 console.log('Media error, trying to recover...');
@@ -441,6 +450,10 @@ class HypnotixApp {
                                 this.fallbackToDirectPlay(channel);
                                 break;
                         }
+                    } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR && data.details === 'bufferStalledError') {
+                        // Handle non-fatal buffer stalling
+                        console.log('Buffer stalled, attempting recovery...');
+                        this.updateStatus(`Buffering ${channel.name}...`);
                     }
                 });
                 
